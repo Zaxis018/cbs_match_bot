@@ -1,0 +1,30 @@
+{
+    "bot_database": {
+        "host": "localhost",
+        "username": "bot_user",
+        "password": "password",
+        "port": "5432",
+        "dbname": "bot_db"
+    },
+    "fuzzy_config": {
+        "min_threshold": "0.9"
+    },
+    "apims_cred": {
+        "api_url": "http://citzchannelmanagerapi.iis/api/v1/connect",
+        "username": "",
+        "password": "",
+        "pem_file": "/home/kshitiz/Documents/Kumari/LetterActionBots/Match-Bot/rpa/PrivateKey_20250306124027.pem"
+    },
+    "email_cred": {
+        "host": "192.168.207.24",
+        "port": "587",
+        "email": "shresthasaurab030@gmail.com",
+        "password": "",
+        "recipients": "kshitiz@quickfoxconsulting.com",
+        "server": "smtp.gmail.com"
+    },
+    "xtract_credentials": {
+        "username": "admin@gmail.com",
+        "password": "quickxtract#@0"
+    }
+}

@@ -1,0 +1,15 @@
+client table column: typeofclient	countryname	clientcode	name	firstname	middlename	lastname	jointname	comregnum	dateofbirth	citizenshipno	fathersname	gfathersname	spousename	clientstatus	mobileno	phone	key_risk_grade	reason	pannumber	regnum
+
+client joint table column: clientcode	name	firstname	middlename	lastname	address1	dateofbirth	citizenshipno	citizendistrict	fathersname	gfathersname	spousename	branchcode	maincode
+
+client beneficial column: 	clientcode	name	address1	dateofbirth	idtype	citizenshipno	fathersname	gfathersname	spousename	branchcode	maincode
+
+client signatory table column: 	clientcode	name	address1	dateofbirth	idtype	citizenshipno	fathersname	gfathersname	spousename	branchcode	maincode
+
+client relation table column: parentclientcode	linkedclientcode	relationtype	branchcode	maincode	isshareholder	sharepercentage	ispoa	roleofsignatory	relation	designation	roleofdirector	percent	typeofbenf
+
+client master table column: clientcode	branchcode	actype	actypedesc	movetype	cycode	maincode	name	isblocked	isdormant	deptcode	remarks
+
+locker auth table column: name	branchcode	lockercode	authname	authadd1	authadd2	authphone	remarks	lockerstatus
+
+locker main table column: 	branchcode	lockercode	lockername	typeofclient	name	countryname	citizenshipno	fathersname	gfathersname	spousename	address1	address2	phone	agreementno	maincode	maturitydate	entereddate	hasauth	regnum	jointname	dateofbirth	nepdate	enteredby	remarks	approvedby	releaseenteredby	releaseapprovedby	releasestatus	releasedate	lasttrandate	citizendistrict	editstatus	editenteredby	editapprovedby	brnominee	remarks1	holdreferenceno	voterid	dlicenceidno	passportno	indianembassyregno	clientstatus	mobileno	key_risk_grade	reason	pannumber	lockerstatus

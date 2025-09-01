@@ -1,0 +1,131 @@
+{
+  "institutional": {
+    "name_pan_reg": {
+      "name": 50,
+      "pan_number": 25,
+      "registration_number": 25
+    },
+    "name_pan": {
+      "name": 60,
+      "pan_number": 40,
+      "registration_number": 0
+    },
+    "name_reg": {
+      "name": 60,
+      "pan_number": 0,
+      "registration_number": 40
+    },
+    "pan_reg": {
+      "name": 0,
+      "pan_number": 50,
+      "registration_number": 50
+    }
+  },
+  "account_no": {
+    "account_no": {
+      "account_no": 100
+    },
+    "account_no_name": {
+      "account_no": 50,
+      "name": 50
+    }
+  },
+  "individual": {
+    "all_info": {
+      "name": 40,
+      "citizenship_no": 20,
+      "fathers_name": 20,
+      "grandfathers_name": 20
+    },
+    "any_three_info": {
+      "citizenship_no_fathers_name_name": {
+        "citizenship_no": 20,
+        "fathers_name": 30,
+        "grandfathers_name": 0,
+        "name": 50
+      },
+      "citizenship_no_grandfathers_name_name": {
+        "citizenship_no": 20,
+        "fathers_name": 0,
+        "grandfathers_name": 30,
+        "name": 50
+      },
+      "fathers_name_grandfathers_name_name": {
+        "citizenship_no": 0,
+        "fathers_name": 25,
+        "grandfathers_name": 25,
+        "name": 50
+      },
+      "citizenship_no_fathers_name_grandfathers_name": {
+        "citizenship_no": 20,
+        "fathers_name": 40,
+        "grandfathers_name": 40,
+        "name": 0
+      }
+    },
+    "any_two_info": {
+      "citizenship_no_name": {
+        "citizenship_no": 40,
+        "fathers_name": 0,
+        "grandfathers_name": 0,
+        "name": 60
+      },
+      "fathers_name_name": {
+        "citizenship_no": 0,
+        "fathers_name": 40,
+        "grandfathers_name": 0,
+        "name": 60
+      },
+      "grandfathers_name_name": {
+        "citizenship_no": 0,
+        "fathers_name": 0,
+        "grandfathers_name": 40,
+        "name": 60
+      },
+      "citizenship_no_fathers_name": {
+        "citizenship_no": 40,
+        "fathers_name": 60,
+        "grandfathers_name": 0,
+        "name": 0
+      },
+      "citizenship_no_grandfathers_name": {
+        "citizenship_no": 50,
+        "fathers_name": 0,
+        "grandfathers_name": 50,
+        "name": 0
+      },
+      "fathers_name_grandfathers_name": {
+        "citizenship_no": 0,
+        "fathers_name": 50,
+        "grandfathers_name": 50,
+        "name": 0
+      }
+    },
+    "one_info": {
+      "name": {
+        "citizenship_no": 0,
+        "fathers_name": 0,
+        "grandfathers_name": 0,
+        "name": 100
+      },
+      "citizenship_no": {
+        "citizenship_no": 100,
+        "fathers_name": 0,
+        "grandfathers_name": 0,
+        "name": 0
+      },
+      "fathers_name": {
+        "citizenship_no": 0,
+        "fathers_name": 100,
+        "grandfathers_name": 0,
+        "name": 0
+      },
+      "grandfathers_name": {
+        "citizenship_no": 0,
+        "fathers_name": 0,
+        "grandfathers_name": 100,
+        "name": 0
+      }
+    }
+  }
+}
