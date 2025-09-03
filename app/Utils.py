@@ -7,7 +7,7 @@ from pathlib import Path
 from datetime import datetime, timedelta
 
 import nepali_datetime
-import fitz
+# import fitz
 
 import Levenshtein
 import numpy as np
@@ -18,7 +18,7 @@ from Errors import WeightageParamsError
 from qrlib.QRUtils import display
 from Variables import BotVariable
 
-from app.component.FTPComponent import FTPComponent
+# from app.component.FTPComponent import FTPComponent
 from app.Constants import CODE_1, CODE_2, CODE_3, CODE_4, CODE_5
 from qrlib.QREnv import QREnv
 from qrlib.QRLogger import QRLogger
@@ -434,58 +434,58 @@ def get_weightage(elements: list[str], type: str) -> dict:
         raise WeightageParamsError(elements)
 
 
-def download_file(ftp: FTPComponent, file, folder: str = ""):
-    with ftp as ftp:
-        ftp.set_cwd(folder)
-        ftp.download_file(file)
-        ftp.reset_wd()
+# def download_file(ftp: FTPComponent, file, folder: str = ""):
+#     with ftp as ftp:
+#         ftp.set_cwd(folder)
+#         ftp.download_file(file)
+#         ftp.reset_wd()
 
 
-def remove_file(ftp: FTPComponent, filename: str, folder: str = ""):
-    with ftp as ftp:
-        ftp.set_cwd(folder)
-        ftp.delete_file(filename)
-        ftp.reset_wd()
+# def remove_file(ftp: FTPComponent, filename: str, folder: str = ""):
+#     with ftp as ftp:
+#         ftp.set_cwd(folder)
+#         ftp.delete_file(filename)
+#         ftp.reset_wd()
 
 
-def upload_file(ftp: FTPComponent, localpath, file):
-    with ftp as ftp:
-        ftp.set_cwd(BotVariable.READ)
-        ftp.upload_file(localpath, file)
-        ftp.reset_wd()
+# def upload_file(ftp: FTPComponent, localpath, file):
+#     with ftp as ftp:
+#         ftp.set_cwd(BotVariable.READ)
+#         ftp.upload_file(localpath, file)
+#         ftp.reset_wd()
 
 
-def upload_file_report(ftp: FTPComponent, localpath, file):
-    with ftp as ftp:
-        ftp.set_cwd(BotVariable.REPORT)
-        ftp.upload_file(localpath, file)
-        ftp.reset_wd()
+# def upload_file_report(ftp: FTPComponent, localpath, file):
+#     with ftp as ftp:
+#         ftp.set_cwd(BotVariable.REPORT)
+#         ftp.upload_file(localpath, file)
+#         ftp.reset_wd()
 
 
-def move_file_in_condition(ftp: FTPComponent, condition: str, filename: str):
-    file: str = filename
-    if condition.find("local_read_failed") >= 0:
-        path_from = BotVariable.DOWNLOAD_PATH_SOURCE + "/" + file
-        if not os.path.exists(path_from):
-            return
-        path_to = BotVariable.DOWNLOAD_PATH_READ + "/" + file
-        shutil.move(path_from, path_to)
-    elif condition.find("local_error_failed") >= 0:
-        path_from = BotVariable.DOWNLOAD_PATH_SOURCE + "/" + file
-        if not os.path.exists(path_from):
-            return
-        path_to = BotVariable.DOWNLOAD_PATH_ERROR + "/" + file
-        shutil.move(path_from, path_to)
-    elif condition.find("ftp_read_failed") >= 0:
-        path_from = BotVariable.DOWNLOAD_PATH_READ
-        if not os.path.exists(path_from):
-            return
-        upload_file(ftp, path_from, file)
-    elif condition.find("ftp_error_failed") >= 0:
-        path_from = BotVariable.DOWNLOAD_PATH_ERROR
-        if not os.path.exists(path_from):
-            return
-        upload_file(ftp, path_from, file)
+# def move_file_in_condition(ftp: FTPComponent, condition: str, filename: str):
+#     file: str = filename
+#     if condition.find("local_read_failed") >= 0:
+#         path_from = BotVariable.DOWNLOAD_PATH_SOURCE + "/" + file
+#         if not os.path.exists(path_from):
+#             return
+#         path_to = BotVariable.DOWNLOAD_PATH_READ + "/" + file
+#         shutil.move(path_from, path_to)
+#     elif condition.find("local_error_failed") >= 0:
+#         path_from = BotVariable.DOWNLOAD_PATH_SOURCE + "/" + file
+#         if not os.path.exists(path_from):
+#             return
+#         path_to = BotVariable.DOWNLOAD_PATH_ERROR + "/" + file
+#         shutil.move(path_from, path_to)
+#     elif condition.find("ftp_read_failed") >= 0:
+#         path_from = BotVariable.DOWNLOAD_PATH_READ
+#         if not os.path.exists(path_from):
+#             return
+#         upload_file(ftp, path_from, file)
+#     elif condition.find("ftp_error_failed") >= 0:
+#         path_from = BotVariable.DOWNLOAD_PATH_ERROR
+#         if not os.path.exists(path_from):
+#             return
+#         upload_file(ftp, path_from, file)
 
 
 def remove_unmatched_files():

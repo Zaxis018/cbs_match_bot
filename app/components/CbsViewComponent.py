@@ -70,7 +70,7 @@ class SQLServerComponent(BaseDBComponent):
         self.username = creds.get('username')
         self.password = creds.get('password')
         self.port = creds.get('port', '1433')
-        self.corporate_view_table = 'VIEW_CLA_CORPORATE'
+        self.institution_view_table = 'VIEW_CLA_CORPORATE'
         self.individual_view_table = 'VIEW_CLA_INDIVIDUAL'
 
     def connect(self) -> None:
@@ -139,24 +139,24 @@ class SQLServerComponent(BaseDBComponent):
             self.logger.error(f"Error executing query: {e}")
             raise Exception(f"Error executing query: {str(e)}")
 
-    def fetch_corporate_data(self) -> Optional[List[Dict]]:
-        """Fetch data from the corporate view"""
+    def fetch_institution_data(self) -> Optional[List[Dict]]:
+        """Fetch data from the institution view"""
         try:
-            self.logger.info("Initiating corporate data fetch from SQL Server...")
+            self.logger.info("Initiating institution data fetch from SQL Server...")
             start_time = time.time()
 
-            query = f"SELECT * FROM {self.corporate_view_table}"
+            query = f"SELECT * FROM {self.institution_view_table}"
             results = self._execute_query(query)
 
             elapsed_time = time.time() - start_time
-            self.logger.info(f"Corporate data fetch completed in {elapsed_time:.2f} seconds")
+            self.logger.info(f"institution data fetch completed in {elapsed_time:.2f} seconds")
 
             if not results:
-                self.logger.warning("No corporate data found")
+                self.logger.warning("No institution data found")
                 return []
             return results
         except Exception as e:
-            self.logger.error(f"Error fetching corporate data: {e}")
+            self.logger.error(f"Error fetching institution data: {e}")
             raise
 
     def fetch_individual_data(self) -> Optional[List[Dict]]:
@@ -202,7 +202,7 @@ class OracleComponent(BaseDBComponent):
         self.customer_view_table = 'delchnl.vw_customer_details_rpa'
         self.customer_service_table = 'delchnl.vw_rpa_customer_services'
         self.freeze_status = 'delchnl.vw_acct_det_kap'
-        self.corporate_table = 'delchnl.vw_corporate_cif_rpa'
+        self.institution_table = 'delchnl.vw_institution_cif_rpa'
 
     def connect(self) -> None:
         """Connect to Oracle database"""        
@@ -383,7 +383,7 @@ class OracleComponent(BaseDBComponent):
             logger.error(f"Error fetching CBS data: {e}")
             raise Exception(f"Error fetching CBS data : {e}")
         
-    def fetch_corporate_data(self) -> Optional[List[Dict]]:
+    def fetch_institution_data(self) -> Optional[List[Dict]]:
         """Fetch CBS data for account and cheque number"""        
         try:
             logger.info("Initiating CBS data fetch from Oracle...")
@@ -393,12 +393,12 @@ class OracleComponent(BaseDBComponent):
             SELECT 
                 *
             FROM 
-                {self.corporate_table}
+                {self.institution_table}
             """
             results = self._execute_query(query)
             
             elapsed_time = time.time() - start_time
-            self.logger.info(f"CBS Corporate data fetch completed in {elapsed_time:.2f} seconds")
+            self.logger.info(f"CBS institution data fetch completed in {elapsed_time:.2f} seconds")
             
             if not results:
                 self.logger.warning("No CBS data found")

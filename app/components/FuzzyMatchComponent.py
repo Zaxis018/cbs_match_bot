@@ -1,36 +1,46 @@
 import os
-import re
+import gc
 import logging
 import traceback
 from typing import Dict, List, Optional, Tuple, Any
 
+import numpy as np
 import pandas as pd
-from datetime import datetime
 from rapidfuzz import fuzz, process, utils
 
-from app.Utils import *
-from app.Constants import *
+# Assuming these are defined in your project's utility and constants files
+from app.Utils import standardize_date_format, convert_bs_to_ad
+from app.Constants import PREFILTER_THRESHOLD, MAX_CANDIDATES_AFTER_PREFILTER, INDIVIDUAL_FIELD_MAPPING, INSTITUTION_FIELD_MAPPING
 from app.components.WeightageComponent import WeightCalculator
 
 from qrlib.QRComponent import QRComponent
+from qrlib.QRUtils import display
 
 logger = logging.getLogger(__name__)
 
 class FuzzyMatcherComponent(QRComponent):
-    """Component for fuzzy matching with dynamic weightage criteria based on available fields."""
+    """
+    Component for fuzzy matching with dynamic weightage, now refactored to handle
+    both individual and institution entities seamlessly.
+    """
 
     def __init__(self):
         super().__init__()
         self.weightage_manager = WeightCalculator()
 
+    # ==============================================================================
+    # Similarity and Preprocessing Methods
+    # ==============================================================================
+
     def _preprocess_text(self, text: str) -> str:
         """Clean and normalize text for comparison."""
         if pd.isna(text) or text is None:
             return ""
-        try:
-            return utils.default_process(str(text).replace(" ", ""))
+        try:      
+            cleaned_text = str(text).strip().replace(" ", "")
+            return utils.default_process(cleaned_text)
         except Exception as e:
-            logger.error(f"Error preprocessing text: {e}",exc_info=True)
+            logger.error(f"Error preprocessing text: {e}", exc_info=True)
             return ""
 
     def _preprocess_dataframe_column(self, series: pd.Series) -> pd.Series:
@@ -39,282 +49,250 @@ class FuzzyMatcherComponent(QRComponent):
             return series
         return series.fillna("").astype(str).apply(self._preprocess_text)
 
-    def _calculate_text_similarity(self, text1: str, text2: str) -> float:
-        """Calculate similarity between two text strings."""
-        if pd.isna(text1) or pd.isna(text2) or text1 is None or text2 is None:
-            return 0.0
-        try:
-            text1 = self._preprocess_text(text1)
-            text2 = self._preprocess_text(text2)
-
-            if not text1 or not text2:
-                return 0.0
-
-            return fuzz.ratio(text1, text2) / 100.0
-        except Exception as e:
-            logger.error(f"Error calculating text similarity: {e}", exc_info=True)
-            return 0.0
-
     def _calculate_batch_text_similarity(self, series: pd.Series, query_value: str) -> pd.Series:
-        """Calculate similarity between a series of values and a query value in a vectorized manner."""
+        """Calculate similarity between a series of values and a query value."""
         if series.empty or pd.isna(query_value) or not query_value:
             return pd.Series(0.0, index=series.index)
-
         try:
             processed_query = self._preprocess_text(query_value)
             if not processed_query:
                 return pd.Series(0.0, index=series.index)
-
             processed_series = self._preprocess_dataframe_column(series)
             similarities = process.cdist(
-                processed_series,
-                [processed_query],
-                scorer=fuzz.ratio,
-                dtype=np.uint8,
-                workers=max(1, os.cpu_count() // 2),
+                processed_series, [processed_query], scorer=fuzz.ratio,
+                dtype=np.uint8, workers=max(1, os.cpu_count() // 2)
             )
             return pd.Series(similarities.flatten() / 100.0, index=series.index)
-
         except Exception as e:
-            logger.error(f"Error in batch text similarity calculation: {e}", exc_info=True)
+            logger.error(f"Error in batch text similarity: {e}", exc_info=True)
             return pd.Series(0.0, index=series.index)
 
-    def _calculate_date_similarity(self, date1: str, date2: str) -> float:
-        """Calculate similarity between two dates."""
-        if pd.isna(date1) or pd.isna(date2) or date1 is None or date2 is None:
-            return 0.0
-
-        try:
-            d1 = standardize_date_format(date1)
-            d2 = standardize_date_format(date2)
-
-            if d1 is None or d2 is None:
-                return 0.0
-
-            standard_ratio = fuzz.ratio(d1, d2) / 100.0
-            return standard_ratio
-        except Exception as e:
-            logger.info(f"Date comparison failed: {e}")
-            return 0.0
-
     def _calculate_batch_date_similarity(self, date_series: pd.Series, query_date: str) -> pd.Series:
-        """Calculate similarity between a series of dates and a query date in a vectorized manner."""
+        """Calculate similarity between a series of dates and a query date."""
         if date_series.empty or pd.isna(query_date) or not query_date:
             return pd.Series(0.0, index=date_series.index)
-
         try:
             std_query_date = standardize_date_format(query_date)
             if std_query_date is None:
                 return pd.Series(0.0, index=date_series.index)
-
             std_date_series = date_series.apply(standardize_date_format).fillna("")
-
             similarities = process.cdist(
-                std_date_series,
-                [std_query_date],
-                scorer=fuzz.ratio,
-                dtype=np.uint8,
-                workers=max(1, os.cpu_count() // 2),
+                std_date_series, [std_query_date], scorer=fuzz.ratio,
+                dtype=np.uint8, workers=max(1, os.cpu_count() // 2)
             )
-
             return pd.Series(similarities.flatten() / 100.0, index=date_series.index)
-
         except Exception as e:
             logger.info(f"Batch date comparison failed: {e}")
             return pd.Series(0.0, index=date_series.index)
 
-    def _get_available_criteria(self, record: Dict[str, Any]) -> List[str]:
-        """Determine which matching criteria are available in the record."""
-        available_criteria = []
-
-        try:
-            record_keys_lower = {k.lower(): k for k in record.keys()}
-
-            field_checks = [
-                ("name", "name"),
-                ("pan_no", "pan_no"),
-                ("grandfathers_name", "grandfathers_name"),
-                ("registration_no", "registration_no"),
-                ("fathers_name", "fathers_name"),
-                ("dob", "dob"),
-                ("citizenship_no", "citizenship_no"),
-                ("account_no", "account_no"),
-            ]
-            for field, criteria in field_checks:
-                field_lower = field.lower()
-                if field_lower in record_keys_lower:
-                    original_key = record_keys_lower[field_lower]
-                    if not pd.isna(record[original_key]) and record[original_key]:
-                        available_criteria.append(criteria)
-        except Exception as e:
-            logger.error(f"Error determining available criteria: {e}", exc_info=True)
-
-        return available_criteria
+    # ==============================================================================
+    # Helper Methods for Criteria, Entity Type, and Weights
+    # ==============================================================================
 
     def _determine_entity_type(self, record: Dict[str, Any]) -> str:
-        """Determine if the record is for an individual, institutional, or account."""
+        """Determine the entity type from the source record."""
         try:
-            # First Check if account Number is Available
-            if "account_no" in record and not pd.isna(record["account_no"]) and record["account_no"]:
-                return "account"
-            
+            # Primary method: check for the 'entity_type' key from the model
             entity_type = record.get("entity_type")
-            if entity_type:
-                return str(entity_type).lower()
+            if entity_type and isinstance(entity_type, str):
+                return entity_type.lower()
 
-            if ("registration_no" in record and not pd.isna(record["registration_no"]) and record["registration_no"]) or ("pan_no" in record and not pd.isna(record["pan_no"]) and record["pan_no"]):
+            # Fallback logic if 'entity_type' is not present
+            if record.get("company_registration_number") or record.get("company_name"):
                 return "institution"
-
-            return "individual"
+            if record.get("citizenship_number") or record.get("fathers_name") or record.get("person_name"):
+                return "individual"
+            
+            return "individual"  # Default if no specific fields are found
         except Exception as e:
             logger.error(f"Error determining entity type: {e}", exc_info=True)
             return "individual"
+
+    def _get_available_criteria(self, mapped_record: Dict[str, Any]) -> List[str]:
+        """Determine which matching criteria are available in the mapped record."""
+        return [
+            criterion for criterion, value in mapped_record.items()
+            if not pd.isna(value) and value
+        ]
 
     def _get_normalized_weights(self, record: Dict[str, Any], available_criteria: List[str]) -> Dict[str, float]:
         """Get normalized weights for the matching criteria based on entity type."""
         try:
             entity_type = self._determine_entity_type(record)
 
-            logger.info(f"Entity type determined as: {entity_type}")
-            logger.info(f"Available criteria: {available_criteria}")
+            logger.info(f"Getting weights for entity type: {entity_type} with criteria: {available_criteria}")
+            display(f"Getting weights for entity type: {entity_type} with criteria: {available_criteria}")
 
             weights = self.weightage_manager.get_weights(entity_type, available_criteria)
             logger.info(f"Normalized weights: {weights}")
+            display(f"Normalized weights: {weights}")
             return weights
+        
         except Exception as e:
-            logger.error(f"Error getting normalized weights: {e}")
-            if available_criteria:
-                return {crit: 1.0 / len(available_criteria) for crit in available_criteria}
-            return {}
+            logger.error(f"Error getting normalized weights: {e}", exc_info=True)
+            # Fallback to equal weights
+            return {crit: 1.0 / len(available_criteria) for crit in available_criteria} if available_criteria else {}
+
+
 
     def match(
         self,
         cbs_data: pd.DataFrame,
         source_record: Dict[str, Any],
         final_threshold: float = 0.9,
-        field_mapping: Optional[Dict[str, Tuple[str, str]]] = None,
     ) -> pd.DataFrame:
-        """CORE function to Match a single source record against CBS data using weighted fuzzy matching."""
+        """CORE function to Match a single source record against CBS data using weighted fuzzy matching"""
+        display(f"Initiating match for source record. CBS data shape: {cbs_data.shape}")
+        logger.info(f"Source Record (raw): {source_record}")
+
         try:
             if cbs_data.empty:
-                logger.info("CBS data is empty, no matching possible")
+                logger.warning("CBS data is empty. No matching possible.")
                 return pd.DataFrame()
 
-            if field_mapping is None:
-                field_mapping = FIELD_MAPPING
+            # 1. Determine entity type and select mapping
+            entity_type = self._determine_entity_type(source_record)
+            field_mapping = INDIVIDUAL_FIELD_MAPPING if entity_type == 'individual' else INSTITUTION_FIELD_MAPPING
+            display(f"Determined Entity Type: '{entity_type}'. Using corresponding field mapping.")
 
-            source_dict = source_record
-            source_dict_lower = {k.lower(): k for k in source_dict.keys()}
+            # 2. flatten nested source record for easy mapping
+            flat_source_record = source_record.copy()  # Start with top-level keys
+            if entity_type == 'individual' and isinstance(source_record.get('individual_details'), dict):
+                # Update with the nested details. Nested values will overwrite top-level ones if keys conflict.
+                flat_source_record.update(source_record['individual_details'])
+            elif entity_type == 'institution' and isinstance(source_record.get('institution_details'), dict):
+                flat_source_record.update(source_record['institution_details'])
 
+            display(f"Flattened source record for mapping: {flat_source_record}")
+
+            # 3. Map the FLATTENED record to standard fields
+            source_dict_lower = {str(k).lower(): k for k in flat_source_record.keys() if k}
             mapped_record = {}
-            for k, (_, source_field) in field_mapping.items():
-                source_field_lower = source_field.lower()
-                if source_field_lower in source_dict_lower:
-                    original_key = source_dict_lower[source_field_lower]
-                    mapped_record[k] = source_dict.get(original_key)
+            for std_field, (_, src_field) in field_mapping.items():
+                if src_field.lower() in source_dict_lower:
+                    original_key = source_dict_lower[src_field.lower()]
+                    mapped_record[std_field] = flat_source_record.get(original_key)
+            
+            display(f"Mapped Record (from flattened data): {mapped_record}")
 
-            logger.info(f"Mapped records: {mapped_record}")
+            # 4. Get available criteria and weights
             available_criteria = self._get_available_criteria(mapped_record)
-
             if not available_criteria:
-                logger.info(f"No matching criteria available for source record")
+                display("No matching criteria available in the source record after mapping. Aborting match.")
                 return pd.DataFrame()
+            
+            weights = self._get_normalized_weights(source_record, available_criteria)
+            display(f"Available Criteria: {available_criteria}\nCalculated Weights: {weights}")
 
-            weights = self._get_normalized_weights(mapped_record, available_criteria)
-
+            # 5. Prefiltering Stage
             potential_matches = cbs_data.copy()
-            original_count = len(potential_matches)
 
-            prefilter_fields = [
-                ("citizenship_no", PREFILTER_THRESHOLD),
-                ("account_no", PREFILTER_THRESHOLD),
-                ("name", PREFILTER_THRESHOLD),
-            ]
+            display(f"Potential Matches Columns: {potential_matches.columns}")
 
-            # CALCULATE SIMILARITY ON PREFILTER FIELDS TO FILTER OUT DATA
+            account_cbs_field, _ = field_mapping.get("account_no", (None, None))
+            if account_cbs_field and account_cbs_field in potential_matches.columns:
+                # Convert to string and pad with leading zeros to make it 16 digits
+                potential_matches[account_cbs_field] = potential_matches[account_cbs_field].astype(str).str.zfill(16)
+
+
+            prefilter_fields = [("account_no", 0.7), ("citizenship_no", 0.4), ("registration_no", 0.5), ("name", 0.5)]
+
+            display(f"Starting pre-filtering with {len(potential_matches)} total records.")
             for field, threshold in prefilter_fields:
                 if field not in available_criteria or potential_matches.empty:
                     continue
 
-                cbs_field, source_field = field_mapping.get(field, (None, None))
-                if not cbs_field or not source_field or source_field not in source_dict:
+
+
+                cbs_field, _ = field_mapping.get(field, (None, None))
+                source_value = mapped_record.get(field)
+
+                # if not cbs_field or pd.isna(source_value) or source_value == '' or cbs_field not in potential_matches.columns:
+                #     display(f"Skipping prefiltering on '{field}' due to missing CBS field or source value.")
+                #     continue
+
+                missing_reasons = []
+                if not cbs_field:
+                    missing_reasons.append("CBS field is None or empty")
+                if pd.isna(source_value) or source_value == '':
+                    missing_reasons.append("Source value is NaN or empty")
+                if cbs_field and cbs_field not in potential_matches.columns:
+                    missing_reasons.append(f"CBS field '{cbs_field}' not found in potential_matches columns")
+                if missing_reasons:
+                    display(f"Skipping prefiltering on '{field}' due to: {', '.join(missing_reasons)}")
                     continue
 
-                source_value = source_dict.get(source_field, "")
+                if field == "account_no":
+                    source_value = str(source_value).zfill(16)
 
-                if source_dict.get(source_field) == "account_no":
-                    source_value = source_value.zfill(16)  # Fill account number with leading zeroes upto 16 digits
-
-                if not source_value:
-                    continue
-
-                logger.info(f"Running batch similarity for {field} against CBS data")
-                display(f"Running batch similarity for {field} against CBS data")
-                similarities = self._calculate_batch_text_similarity(potential_matches[cbs_field], source_value)
-                # filter rows
+                count_before = len(potential_matches)
+                logger.info(f"Prefiltering on '{field}' (CBS field: '{cbs_field}') with threshold >= {threshold}")
+                
+                similarities = self._calculate_batch_text_similarity(potential_matches[cbs_field], str(source_value))
                 potential_matches = potential_matches[similarities >= threshold].copy()
-                logger.info(f"Filtered from {original_count} to {len(potential_matches)} records based on {field} similarity >= {threshold}")
+                count_after = len(potential_matches)
+                
+                display(f"Prefiltering on '{field}': {count_before} -> {count_after} records remaining.")
 
-                # do not prefilter further if conditate count is already low
-                if len(potential_matches) <= MAX_CANDIDATES_AFTER_PREFILTER:
+                if count_after <= MAX_CANDIDATES_AFTER_PREFILTER:
+                    logger.info("Candidate count is low, stopping further pre-filtering.")
                     break
 
             if potential_matches.empty:
-                logger.warning("No potential matches found after prefiltering")
+                display("No potential matches found after the pre-filtering stage. Aborting match.")
                 return pd.DataFrame()
+            
+            display(f"Prefiltering complete. {len(potential_matches)} candidates remaining for final scoring.")
 
-            # CALCULATE SIMILARITY ON REMAINING FIELDS
             similarity_scores = {}
             for criterion in available_criteria:
-                cbs_field, source_field = field_mapping.get(criterion, (None, None))
+                cbs_field, _ = field_mapping.get(criterion, (None, None))
 
-                if not cbs_field or not source_field or source_field not in source_dict:
+                source_value = mapped_record.get(criterion)
+                if not cbs_field or pd.isna(source_value) or source_value == '' or cbs_field not in potential_matches.columns:
                     continue
 
-                source_value = source_dict.get(source_field, "")
-
-                if criterion in ["citizenship_issue_date"]:
-                    similarity_scores[criterion] = self._calculate_batch_date_similarity(potential_matches[cbs_field], convert_bs_to_ad(source_value))
-                elif criterion in ["dob"]:
+                if criterion in ["citizenship_issue_date", "registration_date", "pan_issue_date", "dob"]:
                     similarity_scores[criterion] = self._calculate_batch_date_similarity(potential_matches[cbs_field], source_value)
-                # for others run Text similarity
                 else:
-                    similarity_scores[criterion] = self._calculate_batch_text_similarity(potential_matches[cbs_field], source_value)
+                    if criterion == "account_no":
+                        source_value = str(source_value).zfill(16)
+                        
+                    similarity_scores[criterion] = self._calculate_batch_text_similarity(potential_matches[cbs_field], str(source_value))
 
-            # initialize match score to zero for all data rows
+            # 7. Final Scoring and Thresholding
             total_scores = pd.Series(0.0, index=potential_matches.index)
-            for criterion in available_criteria:
+            for criterion, weight in weights.items():
                 if criterion in similarity_scores:
-                    # perform weighted similarity matching
-                    total_scores += similarity_scores[criterion] * weights.get(criterion, 0)
+                    total_scores += similarity_scores[criterion] * weight
+            
+            display(f"Final scores calculated. Applying threshold: {final_threshold}\n"
+                    f"Score Distribution:\n{total_scores.describe()}")
 
-            # filter by final threshold
             matches = potential_matches[total_scores >= final_threshold].copy()
 
             if matches.empty:
+                display("No records met the final score threshold. Returning empty DataFrame.")
                 return pd.DataFrame()
 
+            # 8. Format and Return Results
             matches["total_score"] = total_scores[matches.index]
             matches["match_status"] = "Matched"
             matches["criteria"] = str(weights)
-
             for criterion in available_criteria:
                 if criterion in similarity_scores:
-                    logger.info(f"{criterion}_score")
                     matches[f"{criterion}_score"] = similarity_scores[criterion][matches.index]
 
-            matches = matches.sort_values("total_score", ascending=False)
-            return matches
+            display(f"Match successful. Found {len(matches)} records meeting the threshold.")
+            return matches.sort_values("total_score", ascending=False)
 
         except Exception as e:
-            logger.error(f"Error in fuzzy matching: {str(e)}", exc_info=True)
-            import traceback
-
-            logger.error(traceback.format_exc(), exc_info=True)
+            logger.error(f"FATAL ERROR in fuzzy matching: {str(e)}", exc_info=True)
+            logger.error(traceback.format_exc())
             return pd.DataFrame()
         finally:
-            import gc
             gc.collect()
+
 
     def get_ticket_matches(
         self,
@@ -322,44 +300,65 @@ class FuzzyMatcherComponent(QRComponent):
         source_data: Dict,
         ticket_id: Optional[str] = "0",
         final_threshold: float = 0.85,
-        field_mapping: Optional[Dict[str, Tuple[str, str]]] = None,
     ) -> Tuple[str, pd.DataFrame, str]:
-        """Match a ticket in source data against CBS data and return a DataFrame with match results."""
+        """Match a ticket against CBS data and return a DataFrame with combined results."""
+
         try:
-            if "entity_type" not in source_data:
-                source_data["entity_type"] = self._determine_entity_type(source_data)
+            source_data["entity_type"] = self._determine_entity_type(source_data)
+            name_field = 'person_name' if source_data['entity_type'] == 'individual' else 'company_name'
+            
+            # Flatten the source data to get the correct name for the ticket
+            flat_source_record = source_data.copy()
+            if source_data['entity_type'] == 'individual' and isinstance(source_data.get('individual_details'), dict):
+                flat_source_record.update(source_data['individual_details'])
+            elif source_data['entity_type'] == 'institution' and isinstance(source_data.get('institution_details'), dict):
+                flat_source_record.update(source_data['institution_details'])
 
-            source_record = source_data
-            ticket_name = f"ticket_{ticket_id}"
-            if "name" in source_record and not pd.isna(source_record.get("name")) and source_record.get("name"):
-                ticket_name += f"_{source_record['name'].replace(' ', '')}"
+            ticket_name = f"ticket_{ticket_id}_{str(flat_source_record.get(name_field, '')).replace(' ', '')}"
 
-            matches = self.match(cbs_data, source_record, final_threshold, field_mapping)
-            is_matched = not matches.empty and "match_status" in matches.columns and any(matches["match_status"] == "Matched")
+            matches = self.match(cbs_data, source_data, final_threshold)
 
-            # format matches as a df and keep columns ordered
-            empty_df = pd.DataFrame(columns=COLUMN_ORDER)
-            for col in source_data:
-                empty_df[f"{col}"] = source_record.get(col, "")
-            matches = empty_df
-            matches["ticket_name"] = ticket_name
-            match_status = "Matched" if is_matched else "Unmatched"
-            return match_status, matches, ticket_name
+            if matches.empty:
+                # If no matches, create a DataFrame from the flattened source data
+                result_df = pd.DataFrame([flat_source_record])
+                result_df["match_status"] = "Unmatched"
+                result_df["total_score"] = 0.0
+                result_df["ticket_name"] = ticket_name
+                return "Unmatched", pd.DataFrame(), ticket_name
+
+            # For "Matched" case, combine source data with each matched CBS record
+            result_df = matches.copy()
+
+
+            """Optional : Append source data to matches"""
+            # for key, value in flat_source_record.items():
+            #     if isinstance(value, (list, dict)):
+            #         result_df[f"source_{key}"] = str(value)
+            #     else:
+            #         result_df[f"source_{key}"] = value 
+
+            result_df["ticket_name"] = ticket_name
+            return "Matched", result_df, ticket_name
 
         except Exception as e:
-            logger.error(f"Error in match_all_tickets: {str(e)}", exc_info=True)
-            import traceback
-
-            logger.error(traceback.format_exc(), exc_info=True)
-            empty_df = pd.DataFrame(columns=COLUMN_ORDER)
+            logger.error(f"Error in get_ticket_matches: {str(e)}", exc_info=True)
+            logger.error(traceback.format_exc())
+            error_df = pd.DataFrame([source_data])
+            error_df["match_status"] = "Error"
             ticket_name = f"ticket_{ticket_id}"
-            if "name" in source_data and not pd.isna(source_data.get("name")) and source_data.get("name"):
-                ticket_name += f"_{source_data['name'].replace(' ', '')}"
-            return "Error", empty_df, ticket_name
-
+            error_df["ticket_name"] = ticket_name
+            return "Error", pd.DataFrame(), ticket_name
         finally:
-            import gc
             gc.collect()
+
+
+
+
+
+
+
+
+
 
 
 
@@ -527,7 +526,7 @@ class FuzzyMatcherComponent(QRComponent):
 #         return available_criteria
 
 #     def _determine_entity_type(self, record: Dict[str, Any]) -> str:
-#         """Determine if the record is for an individual, institutional, or account."""
+#         """Determine if the record is for an individual, institution, or account."""
 #         try:
 #             entity_type = record.get("entity_type")
 

@@ -3,7 +3,7 @@ import numpy as np
 import pandas as pd
 from typing import Dict, List, Set, FrozenSet, Optional, Union, Any
 
-DEFAULT_WEIGHTAGE_FILE = r'citizen_weightage.xlsx'
+DEFAULT_WEIGHTAGE_FILE = r'WeightageSheet.xlsx'
 
 logger = logging.getLogger(__name__)
 
@@ -24,13 +24,13 @@ class WeightCalculator:
         'name': 'Name',
         'dob': 'DOB',
         'account_no': 'Account Number',
-        'pan_no': 'PAN',
+        'pan_number': 'PAN',
         'spouse_name': 'Spouse Name',
         'registration_no': 'Registration',
     }
     
     ENTITY_CONDITIONS = {
-        'institutional': ['name', 'pan_no', 'registration_no'],
+        'institution': ['name', 'pan_number', 'registration_no'],
         'account': ['name', 'account_no'],
         'individual': ['name', 'fathers_name', 'dob', 'citizenship_no', 'grandfathers_name', 'spouse_name']
     }
@@ -66,9 +66,9 @@ class WeightCalculator:
             if not weight_columns:
                 logger.error("No weight columns found in the weightage file")
                 return pd.DataFrame()
-                
+            logger.info("Successfully loaded weightage file")
             return df
-            
+
         except FileNotFoundError:
             logger.error(f"Weightage file not found: {self.weightage_file_path}")
         except pd.errors.EmptyDataError:

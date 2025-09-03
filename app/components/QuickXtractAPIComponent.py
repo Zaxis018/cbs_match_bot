@@ -20,7 +20,7 @@ MATCH_POST_API = "letteraction/matches/{ticket_uuid}/matches/create"
 
 class XtractApiComponent(QRComponent):
     def __init__(self):
-        vault = get_secret("XtractCredentials")
+        vault = get_secret("xtract_credentials")
         self.username = vault["username"]
         self.password = vault["password"]
         self._access_token = None

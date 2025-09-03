@@ -68,11 +68,12 @@ class QREnv:
     QUEUE_NAMES = []
     STORAGE_NAMES = []
     VAULT_NAMES = [
-        "ftp_credentials",
         "bot_database",
+        "sqlserver_cred",
         "fuzzy_config",
-        "oracle_cred",
-        "gemini_api",
+        "apims_cred",
+        "email_cred",
+        "xtract_credentials",
     ]
 
     # Retrieved vault items are set in this dictionary

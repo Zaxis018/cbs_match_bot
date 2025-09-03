@@ -14,9 +14,13 @@ from qrlib.QRProcess import QRProcess
 from app.Variables import BotVariable
 from app.components.CbsViewComponent import  SQLServerComponent
 from app.Errors import DataNotFoundError
-from app.components.FuzzyMatchComponent import get_ticket_matches
+from app.components.FuzzyMatchComponent import FuzzyMatcherComponent
 from app.components.QuickXtractAPIComponent import XtractApiComponent
 from app.database.CBS_database import CbsDataSync, MatchingStatus
+from qrlib.QRUtils import get_secret
+import warnings
+warnings.simplefilter(action='ignore', category=pd.errors.DtypeWarning)
+
 
 
 class WeightageProcess(QRProcess):
@@ -27,9 +31,12 @@ class WeightageProcess(QRProcess):
 
         self.cbs_db = SQLServerComponent()
         self.cbs_sync = CbsDataSync()
+        self.fuzzy_match_component = FuzzyMatcherComponent()
         self.xtract_component = XtractApiComponent()
+        self.threshold = get_secret('fuzzy_config')['min_threshold']
         self.register(self.cbs_db)
         self.register(self.cbs_sync)
+        self.register(self.fuzzy_match_component)
         self.register(self.xtract_component)
 
         run_item: QRRunItem = QRRunItem(is_ticket=True)
@@ -39,33 +46,36 @@ class WeightageProcess(QRProcess):
         self.error_count = 0
         self.max_retries = 3
         self.cbs_view_df = None
-        self.corporate_df = None
+        self.institution_df = None
 
     def _load_cbs_view_data(self, logger):
         """Load CBS view data from either database or local file."""
         display("---------------------EXTRACTING CBS DETAILS-------------------")
-        file_path = os.path.join(self.cbs_csv, "cbs_full_view.csv")
-        corporate_file_path = os.path.join(self.cbs_csv, "corporate_full_view.csv")
+        # file_path = os.path.join("", "individual_data.csv")
+        # institution_file_path = os.path.join("", "institution_data.csv")
+        file_path = "individual_data.csv"
+        institution_file_path = "institution_data.csv"
         try:
             with self.cbs_sync as sync:
-                if sync.is_sync_needed():
+                # if sync.is_sync_needed():
+                if False:   # SKIP SYNC FOR NOW
                     logger.info("SYNC IS NEEDED")
                     with self.cbs as od:
                         results = od.fetch_individual_data()
-                        corporate = od.fetch_corporate_data()
+                        institution = od.fetch_institution_data()
                         if results:
                             df = pd.DataFrame(results)
-                            corporate_df = pd.DataFrame(corporate)
+                            institution_df = pd.DataFrame(institution)
                             df.to_csv(
                                 file_path, index=False, quoting=csv.QUOTE_NONNUMERIC
                             )
-                            corporate_df.to_csv(
-                                corporate_file_path,
+                            institution_df.to_csv(
+                                institution_file_path,
                                 index=False,
                                 quoting=csv.QUOTE_NONNUMERIC,
                             )
                             self.cbs_sync.update_last_sync_time()
-                            return df, corporate_df
+                            return df, institution_df
                         else:
                             raise DataNotFoundError("No data found in the database.")
                 else:
@@ -73,10 +83,10 @@ class WeightageProcess(QRProcess):
 
             if os.path.exists(file_path):
                 return pd.read_csv(file_path, dtype={"ACCT_NUMBER": str}), pd.read_csv(
-                    corporate_file_path, dtype="str"
+                    institution_file_path, dtype="str" , low_memory=False
                 )
             else:
-                raise DataNotFoundError("CBS weightage data not found in file.")
+                raise DataNotFoundError("CBS data files not found")
 
         except Exception as e:
             logger.error(f"Error while loading CBS data: {e}")
@@ -101,7 +111,7 @@ class WeightageProcess(QRProcess):
             with self.cbs_sync as sync:
                 sync.create_table()
 
-            self.cbs_view_df, self.corporate_df = self._load_cbs_view_data(logger)
+            self.cbs_view_df, self.institution_df = self._load_cbs_view_data(logger)
         except Exception as e:
             logger.error(f"Failed to create database table: {str(e)}")
             run_item.report_data["Task"] = "BeforeRun: Weightage Process"
@@ -117,10 +127,13 @@ class WeightageProcess(QRProcess):
                 token = self.xtract_component.get_access_token()
                 if token:
                     logger.info("Creating database tables for excel file and extracted data")
+                    display("Creating database tables for excel file and extracted data")
                 else:
                     logger.warning("Could not Login")
+                    display("Could not Login")
         except Exception as e:
             logger.info("Failed to Login", {e})
+            display("Failed to Login", {e})
 
     def before_run_item(self, *args, **kwargs) -> None:
         """Setup before processing each ticket"""
@@ -136,7 +149,7 @@ class WeightageProcess(QRProcess):
 
             ticket_id = current_ticket.get("uuid")
             logger.info(f"Setting up for processing ticket ID: {ticket_id}")
-            display(f"Preparing to process ticket ID: {ticket_id}")
+            display(f">>>>>>>>>>>>>>>>>>>>>>>Preparing to process ticket ID: {ticket_id}<<<<<<<<<<<<<<<<<<<<<\n")
 
             # Pass ticket info in report_data for later stages
             run_item.report_data["ticket_id"] = ticket_id
@@ -162,32 +175,36 @@ class WeightageProcess(QRProcess):
         try:
             # Get the required data from kwargs
             ticket_kwargs = kwargs.get("current_ticket")
-            cbs_view_df = self.cbs_view_df
-            entity_type = kwargs.get('entity_type')
+            entity_type = ticket_kwargs.get('entity_type')
+            display(f"entity type--{entity_type}")
             ticket_uuid = ticket_kwargs.get('uuid')
 
             logger.info(f"Processing ticket ID: {ticket_kwargs.get('id')} ")     
             if entity_type == 'institution':
-                matched_status, matches_df, ticket_name = get_ticket_matches(
-                    cbs_data=self.corporate_df, 
-                    tickets_data=ticket_kwargs, 
+                matched_status, matches_df, ticket_name = self.fuzzy_match_component.get_ticket_matches(
+                    cbs_data=self.institution_df, 
+                    source_data=ticket_kwargs, 
                     ticket_id=str(ticket_kwargs.get('uuid')),
                     final_threshold=float(self.threshold),
-                    chalani_number=ticket_kwargs.get('chalani_no'),
+                    # chalani_number=ticket_kwargs.get('chalani_no'),
                 )
             else:
-                matched_status, matches_df, ticket_name = get_ticket_matches(
+                matched_status, matches_df, ticket_name = self.fuzzy_match_component.get_ticket_matches(
                     cbs_data=self.cbs_view_df, 
-                    tickets_data=ticket_kwargs, 
+                    source_data=ticket_kwargs, 
                     ticket_id=str(ticket_kwargs.get('uuid')),
                     final_threshold=float(self.threshold),
-                    chalani_number=ticket_kwargs.get('chalani_no'),
+                    # chalani_number=ticket_kwargs.get('chalani_no'),
                 )
 
             # convert df list of dictionaries (records):
             matches_list = matches_df.to_dict('records')
-            display("MATCHES LIST---->", matches_list)
+            
+            
             logger.info("MATCHES LIST---->", matches_list)
+            display(f"Searched Matches from CBS : {matches_list[:2]}")
+
+
             logger.info(f"Processed ticket ID: {ticket_kwargs.get('id')} with status: {matched_status}")
             
             run_item.report_data = {
@@ -195,40 +212,43 @@ class WeightageProcess(QRProcess):
                 "Ticket_id": ticket_kwargs.get('id'),
                 "Chalani Number": ticket_kwargs.get('chalani_no'),
                 "Status": matched_status,
-                "matches": matches_list,
+                # "matches": matches_list,
                 "Number of Matches Found": len(matches_list),
             }
             run_item.set_success()
             run_item.post()
             
             # POST MATCHES TO XTRACT API
-            try:
-                response = self.xtract_component._post_matches(matches_list, ticket_uuid)
-                if response.status_code == 200:
-                    post_status = 'success'
-                    logger.info(f"Successfully posted matches to Xtract API: {response.text}")
-                    display(f"Successfully posted matches to Xtract API: {response.text}")
-                else:
-                    post_status = 'failed'
-                    logger.error(f"Failed to post matches, status code: {response.status_code}, response: {response.text}")
-                    display(f"Failed to post matches, status code: {response.status_code}, response: {response.text}" )
+            if matches_list:
+                try:
+                    response = self.xtract_component._post_matches(matches_list, ticket_uuid)
+                    if response.status_code == 200:
+                        post_status = 'success'
+                        logger.info(f"Successfully posted matches to Xtract API: {response.text}")
+                        display(f"Successfully posted matches to Xtract API: {response.text}")
+                    else:
+                        post_status = 'failed'
+                        # logger.error(f"Failed to post matches, status code: {response.status_code}, response: {response.text}")
+                        logger.error(f"Failed to post matches, status code: {response.status_code}")
+                        # display(f"Failed to post matches, status code: {response.status_code}, response: {response.text}" )
+                        display(f"Failed to post matches, status code: {response.status_code}" )
+                    
+                except Exception as e:
+                    logger.error(f"Could not Connect to Xtract API: {str(e)}")
+                    run_item.report_data["Task"] = "ExecuteRunItem: Post Matches"
+                    run_item.report_data["Reason"] = f"Failed to post matches: {str(e)}"
+                    run_item.set_error()
+                    run_item.post()
 
-            except Exception as e:
-                logger.error(f"Could not Connect to Xtract API: {str(e)}")
-                run_item.report_data["Task"] = "ExecuteRunItem: Post Matches"
-                run_item.report_data["Reason"] = f"Failed to post matches: {str(e)}"
-                run_item.set_error()
-                run_item.post()
-
-            return {
-                'ticket_id': ticket_kwargs.get('id'),
-                'matched_status': matched_status,
-                "chalani_no": ticket_kwargs.get('chalani_no'),
-                "matches": matches_list,
-                "post_status": post_status,
-                "Number of Matches Found": len(matches_list),
-                'ticket_name': ticket_name,
-            }
+                return {
+                    'ticket_id': ticket_kwargs.get('id'),
+                    'matched_status': matched_status,
+                    "chalani_no": ticket_kwargs.get('chalani_no'),
+                    "matches": matches_list,
+                    "post_status": post_status,
+                    "Number of Matches Found": len(matches_list),
+                    'ticket_name': ticket_name,
+                }
         
         except Exception as e:
             logger.error(f"Error in execute_run_item: {str(e)}")
@@ -256,7 +276,7 @@ class WeightageProcess(QRProcess):
         matched_status = kwargs.get("matched_status")
         ticket_filename = kwargs.get("ticket_filename")
 
-        display(f"{ticket_id}, {matched_status}, {ticket_filename}")
+        display(f"ticket id : {ticket_id}, match status: {matched_status}, ticket filename: {ticket_filename}")
 
         if not all([ticket_id, matched_status, ticket_filename]):
             logger.warning("Missing data in kwargs for after_run_item")
@@ -286,24 +306,34 @@ class WeightageProcess(QRProcess):
                 "date_to": date_to,
                 "date_from": date_from,
             }
-            pending_tickets = self.xtract_component._fetch_tickets(params=params)
+            response = self.xtract_component._fetch_tickets(params=params)
+            pending_tickets = response.json().get('results')
 
-            display(f"Pending Tickets: {(pending_tickets)}")
+            individual_tickets = [t for t in pending_tickets if t.get("entity_type") == "individual"]
+            institution_tickets = [t for t in pending_tickets if t.get("entity_type") == "institution"]
+
+            pending_tickets = individual_tickets[:2] + institution_tickets[:2]
+            display(f"pending tickets{pending_tickets}")
+            logger.info("pending_tickets", pending_tickets)
 
             logger.info(f"Found {len(pending_tickets)} tickets to process")
+            display(f"Found {len(pending_tickets)} tickets to process")
 
             # Step 2: Process each pending ticket using run_item methods
             for ticket in pending_tickets:
                 ticket_kwargs = kwargs.copy()
                 ticket_kwargs["current_ticket"] = ticket
 
-                display("TICKET KWARGS ---> ", ticket_kwargs)
+                # display(f"TICKET KWARGS ---> , {ticket_kwargs}")
+                # logger.info("TICKET KWARGS ---> ", ticket_kwargs)
 
                 # Process the ticket using the individual run item methods
                 self.before_run_item(**ticket_kwargs)
                 updated_kwargs = self.execute_run_item(**ticket_kwargs)
                 if updated_kwargs:
                     ticket_kwargs = updated_kwargs
+                    # ticket_kwargs.update(updated_kwargs)
+
 
                 self.after_run_item(**ticket_kwargs)
 

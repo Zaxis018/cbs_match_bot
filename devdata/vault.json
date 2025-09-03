@@ -6,8 +6,15 @@
         "port": "5432",
         "dbname": "bot_db"
     },
+    "sqlserver_cred": {
+        "server": "192.168.83.9",
+        "database": "THIRDPARTY",
+        "username": "digital_login",
+        "password": "Digital123!@#",    
+        "port": "1433"
+    },
     "fuzzy_config": {
-        "min_threshold": "0.9"
+        "min_threshold": "0.65"
     },
     "apims_cred": {
         "api_url": "http://citzchannelmanagerapi.iis/api/v1/connect",

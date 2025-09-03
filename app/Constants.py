@@ -13,7 +13,7 @@ BOT_DB_EMAIL_TABLE_NAME = "emails_table"
 BOT_DB_UNIQUE_TABLE_NAME = "unique_id_table"
 
 # QUICKXTRACT APIs
-QUICKXTRACT_BASE_URL = "192.168.1.124:8000/"
+QUICKXTRACT_BASE_URL = "http://0.0.0.0:8001/"
 API_PREFIX = "api/v1/"
 
 TICKET_FETCH_API = "letteraction/tickets/"
@@ -122,6 +122,32 @@ FIELD_MAPPING = {
     'account_no': ('ACCT_NUMBER', 'account_no'),
     'nid': ('NID_NUMBER', 'nid'),
     'dob': ('CUST_DOB', 'dob'),
+}
+
+# key = standard field ,  value = (<CBS_FIELD_NAME>, <QUICKXTRACT_FIELD_NAME>)
+
+# Mapping for Individual Entities
+INDIVIDUAL_FIELD_MAPPING = {
+    'name': ('Customer_Name', 'person_name'),
+    'fathers_name': ('Father_Name', 'fathers_name'),
+    'grandfathers_name': ('Grandfather_Name', 'grandfathers_name'),
+    'spouse_name': ('Spouse_Name', 'spouse_name'),
+    'citizenship_no': ('Citizenship_Number', 'citizenship_number'),
+    'citizenship_issue_date': ('Citizenship_Issue_Date', 'citizenship_issue_date'),
+    'pan_number': ('PAN_Number', 'pan_number'),
+    'account_no': ('FORACID', 'account_number'),
+    'nid': ('NID_Number', 'NID_number'),
+    'dob': ('Date_of_Birth', 'date_of_birth'), 
+}
+
+# Mapping for Institution Entities based on CBS 'institution view' and QuickXtract 'InstitutionDetails' model
+INSTITUTION_FIELD_MAPPING = {
+    'name': ('Company_Name', 'company_name'),
+    'registration_no': ('Company_Registeration_Number', 'company_registration_number'),
+    'pan_number': ('Pan_Number', 'company_pan_number'),
+    'account_no': ('FORACID', 'account_number'),
+    'registration_date': ('Company_Registeration_Date', 'company_registration_date'),
+    'pan_issue_date': ('Pan_Issue_Date', 'pan_issue_date'),
 }
 
 
