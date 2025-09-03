@@ -10,7 +10,7 @@ from rapidfuzz import fuzz, process, utils
 
 # Assuming these are defined in your project's utility and constants files
 from app.Utils import standardize_date_format, convert_bs_to_ad
-from app.Constants import PREFILTER_THRESHOLD, MAX_CANDIDATES_AFTER_PREFILTER, INDIVIDUAL_FIELD_MAPPING, INSTITUTION_FIELD_MAPPING
+from app.Constants import PREFILTER_THRESHOLD, MAX_CANDIDATES_AFTER_PREFILTER, INDIVIDUAL_FIELD_MAPPING, INSTITUTION_FIELD_MAPPING , MAX_MATCHES_TO_STORE
 from app.components.WeightageComponent import WeightCalculator
 
 from qrlib.QRComponent import QRComponent
@@ -125,7 +125,6 @@ class FuzzyMatcherComponent(QRComponent):
 
             weights = self.weightage_manager.get_weights(entity_type, available_criteria)
             logger.info(f"Normalized weights: {weights}")
-            display(f"Normalized weights: {weights}")
             return weights
         
         except Exception as e:
@@ -284,7 +283,7 @@ class FuzzyMatcherComponent(QRComponent):
                     matches[f"{criterion}_score"] = similarity_scores[criterion][matches.index]
 
             display(f"Match successful. Found {len(matches)} records meeting the threshold.")
-            return matches.sort_values("total_score", ascending=False)
+            return matches.sort_values("total_score", ascending=False).head(MAX_MATCHES_TO_STORE)
 
         except Exception as e:
             logger.error(f"FATAL ERROR in fuzzy matching: {str(e)}", exc_info=True)

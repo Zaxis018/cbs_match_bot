@@ -17,6 +17,7 @@ from qrlib.QRProcess import QRProcess
 from app.Variables import BotVariable
 from app.components.CbsViewComponent import  SQLServerComponent
 from app.Errors import DataNotFoundError
+from app.Utils import clean_floats
 from app.components.FuzzyMatchComponent import FuzzyMatcherComponent
 from app.components.QuickXtractAPIComponent import XtractApiComponent
 from app.database.CBS_database import CbsDataSync, MatchingStatus
@@ -222,7 +223,8 @@ class WeightageProcess(QRProcess):
             # POST MATCHES TO XTRACT API
             if matches_list:
                 try:
-                    transformed_matches = transform_matches_for_xtract(matches_list)
+                    transformed_matches = clean_floats(transform_matches_for_xtract(matches_list))
+
                     response = self.xtract_component._post_matches(transformed_matches, ticket_uuid)
                     if response.status_code == 200:
                         post_status = 'success'
@@ -400,10 +402,11 @@ def transform_matches_for_xtract(matched_list: list) -> list:
                 "matched_name": item.get('Customer_Name'),
                 "name_match_score": item.get('name_score', 0),
                 "overall_match_percentage": item.get('total_score', 0),
+                "match_criteria": item.get('criteria', ''),
                 "match_status": 'potential',
                 "cif_id": item.get('CIF_ID'),
                 "account_number": item.get('FORACID'),
-                "phone_number": clean_value(item.get('Phone_Number')),
+                "phone_number": (clean_value(item.get('Phone_Number'))),
                 "individual_match_details": {
                     "matched_date_of_birth": None,  #  DOB not available in CBS
                     "matched_fathers_name": item.get('Father_Name'),
@@ -416,8 +419,8 @@ def transform_matches_for_xtract(matched_list: list) -> list:
                     "Permanent_address": item.get('Permanent_Address'),
                     "Temporary_address": item.get('Temporary_Address'),
                     "dob_match_score": item.get('dob_score', 0),  
-                    "father_name_match_score": item.get('father_name_score', 0),  
-                    "grandfather_name_match_score": item.get('grandfather_name_score', 0), 
+                    "father_name_match_score": item.get('fathers_name_score', 0),  
+                    "grandfather_name_match_score": item.get('grandfathers_name_score', 0), 
                     "spouse_name_match_score": item.get('spouse_name_score', 0),
                     "citizenship_match_score": item.get('citizenship_no_score', 0)
                 },
@@ -431,6 +434,7 @@ def transform_matches_for_xtract(matched_list: list) -> list:
             transformed_item = {
                 "matched_name": item.get('Company_Name'),
                 "name_match_score": item.get('name_score', 0),
+                "match_criteria": item.get('criteria', ''),
                 "overall_match_percentage": item.get('total_score', 0),
                 "match_status": 'potential',
                 "verified_by": None, 

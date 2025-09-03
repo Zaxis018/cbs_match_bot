@@ -5,6 +5,7 @@ import subprocess
 import datetime as dt
 from pathlib import Path
 from datetime import datetime, timedelta
+import math 
 
 import nepali_datetime
 # import fitz
@@ -31,7 +32,20 @@ def delete_file(path):
     else:
         return False
 
-
+def clean_floats(obj):
+    if isinstance(obj, dict):
+        return {k: clean_floats(v) for k, v in obj.items()}
+    elif isinstance(obj, list):
+        return [clean_floats(v) for v in obj]
+    elif isinstance(obj, float):
+        if math.isfinite(obj):
+            return obj
+        else:
+            return 0.0  # or None, or custom handling
+    else:
+        return obj
+    
+    
 def task_kill(process_name: str):  # type: ignore
     call = "TASKLIST", "/FI", "imagename eq %s" % process_name
     # use buildin check_output right away

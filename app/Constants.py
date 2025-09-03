@@ -150,7 +150,7 @@ INSTITUTION_FIELD_MAPPING = {
     'pan_issue_date': ('Pan_Issue_Date', 'pan_issue_date'),
 }
 
-
+MAX_MATCHES_TO_STORE = 10
 PREFILTER_THRESHOLD = 0.70                               # 70% threshold for pre-filtering
 MAX_CANDIDATES_AFTER_PREFILTER = 100
 
