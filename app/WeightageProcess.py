@@ -1,6 +1,9 @@
 import os
 import traceback
 import csv
+import json
+import math
+
 import pandas as pd
 from pathlib import Path
 from typing import List, Optional, Dict, Any
@@ -199,8 +202,6 @@ class WeightageProcess(QRProcess):
 
             # convert df list of dictionaries (records):
             matches_list = matches_df.to_dict('records')
-            
-            
             logger.info("MATCHES LIST---->", matches_list)
             display(f"Searched Matches from CBS : {matches_list[:2]}")
 
@@ -221,7 +222,8 @@ class WeightageProcess(QRProcess):
             # POST MATCHES TO XTRACT API
             if matches_list:
                 try:
-                    response = self.xtract_component._post_matches(matches_list, ticket_uuid)
+                    transformed_matches = transform_matches_for_xtract(matches_list)
+                    response = self.xtract_component._post_matches(transformed_matches, ticket_uuid)
                     if response.status_code == 200:
                         post_status = 'success'
                         logger.info(f"Successfully posted matches to Xtract API: {response.text}")
@@ -230,7 +232,7 @@ class WeightageProcess(QRProcess):
                         post_status = 'failed'
                         # logger.error(f"Failed to post matches, status code: {response.status_code}, response: {response.text}")
                         logger.error(f"Failed to post matches, status code: {response.status_code}")
-                        # display(f"Failed to post matches, status code: {response.status_code}, response: {response.text}" )
+                        display(f"Failed to post matches, status code: {response.status_code}, response: {response.text}" )
                         display(f"Failed to post matches, status code: {response.status_code}" )
                     
                 except Exception as e:
@@ -324,9 +326,6 @@ class WeightageProcess(QRProcess):
                 ticket_kwargs = kwargs.copy()
                 ticket_kwargs["current_ticket"] = ticket
 
-                # display(f"TICKET KWARGS ---> , {ticket_kwargs}")
-                # logger.info("TICKET KWARGS ---> ", ticket_kwargs)
-
                 # Process the ticket using the individual run item methods
                 self.before_run_item(**ticket_kwargs)
                 updated_kwargs = self.execute_run_item(**ticket_kwargs)
@@ -370,3 +369,97 @@ class WeightageProcess(QRProcess):
             run_item.report_data["Reason"] = f"Failed to finalize process: {str(e)}"
             run_item.set_error()
             run_item.post()
+
+
+
+def transform_matches_for_xtract(matched_list: list) -> list:
+    """
+    Transforms a list of matched individuals or institutions into the format
+    expected by the QuickXtract API. 
+    Args:
+        matched_list: A list of dictionaries, each dictionary represents either an individual match or an institutional match.
+    Returns:
+        A list of dictionaries formatted for the QuickXtract API.
+    """
+    if not matched_list:
+        return []
+
+    transformed_list = []
+
+    def clean_value(value, default=''):
+        if value is None:
+            return default
+        if isinstance(value, float) and math.isnan(value):
+            return default
+        return str(value)
+
+    if 'Customer_Name' in matched_list[0]:
+        # Process as a list of individual matches
+        for item in matched_list:
+            transformed_item = {
+                "matched_name": item.get('Customer_Name'),
+                "name_match_score": item.get('name_score', 0),
+                "overall_match_percentage": item.get('total_score', 0),
+                "match_status": 'potential',
+                "cif_id": item.get('CIF_ID'),
+                "account_number": item.get('FORACID'),
+                "phone_number": clean_value(item.get('Phone_Number')),
+                "individual_match_details": {
+                    "matched_date_of_birth": None,  #  DOB not available in CBS
+                    "matched_fathers_name": item.get('Father_Name'),
+                    "matched_grandfathers_name": item.get('Grandfather_Name'),
+                    "matched_spouse_name": item.get('Spouse_Name'),
+                    "matched_citizenship_number": item.get('Citizenship_Number'),
+                    "NID_number": clean_value(item.get('NID_Number')),
+                    "NID_issue_date": clean_value(item.get('NID_Issue_Date')),
+                    "NID_issue_district": clean_value(item.get('NID_Issue_District')),
+                    "Permanent_address": item.get('Permanent_Address'),
+                    "Temporary_address": item.get('Temporary_Address'),
+                    "dob_match_score": item.get('dob_score', 0),  
+                    "father_name_match_score": item.get('father_name_score', 0),  
+                    "grandfather_name_match_score": item.get('grandfather_name_score', 0), 
+                    "spouse_name_match_score": item.get('spouse_name_score', 0),
+                    "citizenship_match_score": item.get('citizenship_no_score', 0)
+                },
+                "institution_match_details": None,
+            }
+            transformed_list.append(transformed_item)
+
+    elif 'Company_Name' in matched_list[0]:
+        # Process as a list of institutional matches
+        for item in matched_list:
+            transformed_item = {
+                "matched_name": item.get('Company_Name'),
+                "name_match_score": item.get('name_score', 0),
+                "overall_match_percentage": item.get('total_score', 0),
+                "match_status": 'potential',
+                "verified_by": None, 
+                "cif_id": item.get('Cif_Id'),
+                "account_number": item.get('FORACID'),
+                "phone_number": clean_value(item.get('Phone_Number')),
+                "individual_match_details": None,
+                "institution_match_details": {
+                    "matched_pan_number": clean_value(item.get('Pan_Number')),
+                    "matched_registration_number": item.get('Company_Registeration_Number'),
+                    "matched_company_address": None,  # Not available in CBS data
+                    "pan_issue_date": clean_value(item.get('Pan_Issue_Date')),
+                    "company_registration_date": item.get('Company_Registeration_Date'),
+                    "pan_match_score": item.get('pan_number_score', 0), 
+                    "registration_match_score": item.get('registration_no_score', 0),
+                    "matched_company_address_score": 0  
+                }
+            }
+            transformed_list.append(transformed_item)
+
+    return transformed_list
+
+
+
+
+
+
+
+
+
+
+

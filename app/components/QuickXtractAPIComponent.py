@@ -15,7 +15,7 @@ TICKET_FETCH_API = "letteraction/tickets/"
 TICKET_DETAIL_API = "letteraction/tickets/{ticket_uuid}/"
 
 MATCH_FETCH_API = "letteraction/tickets/{ticket_uuid}/matches/"
-MATCH_POST_API = "letteraction/matches/{ticket_uuid}/matches/create"
+MATCH_POST_API = "letteraction/tickets/{ticket_uuid}/matches/create/"
 
 
 class XtractApiComponent(QRComponent):
