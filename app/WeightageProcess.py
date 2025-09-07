@@ -221,6 +221,7 @@ class WeightageProcess(QRProcess):
             run_item.post()
             
             # POST MATCHES TO XTRACT API
+            
             if matches_list:
                 try:
                     transformed_matches = clean_floats(transform_matches_for_xtract(matches_list))
@@ -253,7 +254,9 @@ class WeightageProcess(QRProcess):
                     "Number of Matches Found": len(matches_list),
                     'ticket_name': ticket_name,
                 }
-        
+            
+            else:
+                response = self.xtract_component._post_matches(transformed_matches, ticket_uuid)
         except Exception as e:
             logger.error(f"Error in execute_run_item: {str(e)}")
             logger.error(traceback.format_exc())
@@ -408,6 +411,7 @@ def transform_matches_for_xtract(matched_list: list) -> list:
                 "account_number": item.get('FORACID'),
                 "phone_number": (clean_value(item.get('Phone_Number'))),
                 "individual_match_details": {
+                    "DMS_ID": item.get('DMS_ID'),
                     "matched_date_of_birth": None,  #  DOB not available in CBS
                     "matched_fathers_name": item.get('Father_Name'),
                     "matched_grandfathers_name": item.get('Grandfather_Name'),

@@ -201,8 +201,6 @@ class FuzzyMatcherComponent(QRComponent):
                 if field not in available_criteria or potential_matches.empty:
                     continue
 
-
-
                 cbs_field, _ = field_mapping.get(field, (None, None))
                 source_value = mapped_record.get(field)
 
